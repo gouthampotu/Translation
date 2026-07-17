@@ -11,6 +11,8 @@ st.set_page_config(
 st.title("🌍 Language Translator")
 st.write("Translate text using Facebook NLLB-200")
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 languages = {
     "English": "eng_Latn",
     "French": "fra_Latn",
@@ -23,21 +25,13 @@ languages = {
     "Malayalam": "mal_Mlym"
 }
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 @st.cache_resource
 def load_model():
     model_name = "facebook/nllb-200-distilled-600M"
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name,
-        use_fast=False
-    )
-
-    model = AutoModelForSeq2SeqLM.from_pretrained(
-        model_name
-    ).to(device)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
     return tokenizer, model
 
@@ -49,38 +43,25 @@ def translate(text, source, target):
 
     tokenizer.src_lang = languages[source]
 
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=512
-    ).to(device)
-
-    # Create language token manually
-    target_token = "__" + languages[target] + "__"
-
-    forced_bos_token_id = tokenizer.convert_tokens_to_ids(
-        target_token
-    )
+    encoded = tokenizer(text, return_tensors="pt")
 
     generated_tokens = model.generate(
-        **inputs,
-        forced_bos_token_id=forced_bos_token_id,
-        max_length=256
+        **encoded,
+        forced_bos_token_id=tokenizer.convert_tokens_to_ids(
+            languages[target]
+        ),
+        max_length=200
     )
 
     translated = tokenizer.batch_decode(
         generated_tokens,
         skip_special_tokens=True
-    )[0]
+    )
 
-    return translated
+    return translated[0]
 
 
-text = st.text_area(
-    "Enter Text",
-    height=150
-)
+text = st.text_area("Enter Text", height=150)
 
 col1, col2 = st.columns(2)
 
@@ -100,17 +81,13 @@ with col2:
 if st.button("Translate"):
 
     if text.strip() == "":
-        st.warning("Please enter text.")
+        st.warning("Please enter some text.")
 
     else:
 
         with st.spinner("Translating..."):
 
-            result = translate(
-                text,
-                source,
-                target
-            )
+            result = translate(text, source, target)
 
         st.success("Translation Completed")
 
