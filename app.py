@@ -12,7 +12,7 @@ st.set_page_config(
 # ----------------------------
 @st.cache_resource
 def load_model():
-    model_name = "facebook/nllb-200-distilled-600M"
+    model_name = "Helsinki-NLP/opus-mt-en-fr"
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
