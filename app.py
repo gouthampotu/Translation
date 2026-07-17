@@ -1,4 +1,5 @@
 import streamlit as st
+import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 st.set_page_config(
@@ -7,25 +8,10 @@ st.set_page_config(
     layout="centered"
 )
 
-# ----------------------------
-# Load Model
-# ----------------------------
-@st.cache_resource
-def load_model():
-    model_name = "Helsinki-NLP/opus-mt-en-fr"
+st.title("🌍 Language Translator")
+st.write("Translate text using Facebook NLLB-200")
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-
-    return tokenizer, model
-
-tokenizer, model = load_model()
-
-# ----------------------------
-# Language Codes
-# ----------------------------
-
-language_codes = {
+languages = {
     "English": "eng_Latn",
     "French": "fra_Latn",
     "German": "deu_Latn",
@@ -37,42 +23,59 @@ language_codes = {
     "Malayalam": "mal_Mlym"
 }
 
-# ----------------------------
-# Translation Function
-# ----------------------------
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def translate(text, source_lang, target_lang):
 
-    tokenizer.src_lang = language_codes[source_lang]
+@st.cache_resource
+def load_model():
+    model_name = "facebook/nllb-200-distilled-600M"
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        use_fast=False
+    )
+
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        model_name
+    ).to(device)
+
+    return tokenizer, model
+
+
+tokenizer, model = load_model()
+
+
+def translate(text, source, target):
+
+    tokenizer.src_lang = languages[source]
 
     inputs = tokenizer(
         text,
-        return_tensors="pt"
+        return_tensors="pt",
+        truncation=True,
+        max_length=512
+    ).to(device)
+
+    # Create language token manually
+    target_token = "__" + languages[target] + "__"
+
+    forced_bos_token_id = tokenizer.convert_tokens_to_ids(
+        target_token
     )
 
     generated_tokens = model.generate(
         **inputs,
-        forced_bos_token_id=tokenizer.convert_tokens_to_ids(
-            language_codes[target_lang]
-        ),
+        forced_bos_token_id=forced_bos_token_id,
         max_length=256
     )
 
-    output = tokenizer.batch_decode(
+    translated = tokenizer.batch_decode(
         generated_tokens,
         skip_special_tokens=True
     )[0]
 
-    return output
+    return translated
 
-
-# ----------------------------
-# UI
-# ----------------------------
-
-st.title("🌍 Language Translator")
-
-st.write("Translate text using Hugging Face NLLB Model")
 
 text = st.text_area(
     "Enter Text",
@@ -84,20 +87,21 @@ col1, col2 = st.columns(2)
 with col1:
     source = st.selectbox(
         "Source Language",
-        list(language_codes.keys())
+        list(languages.keys())
     )
 
 with col2:
     target = st.selectbox(
         "Target Language",
-        list(language_codes.keys()),
-        index=1
+        list(languages.keys()),
+        index=5
     )
 
 if st.button("Translate"):
 
     if text.strip() == "":
-        st.warning("Please enter some text.")
+        st.warning("Please enter text.")
+
     else:
 
         with st.spinner("Translating..."):
@@ -108,12 +112,10 @@ if st.button("Translate"):
                 target
             )
 
-        st.success("Translation Completed!")
-
-        st.subheader("Translated Text")
+        st.success("Translation Completed")
 
         st.text_area(
-            "",
-            value=result,
+            "Translated Text",
+            result,
             height=150
         )
